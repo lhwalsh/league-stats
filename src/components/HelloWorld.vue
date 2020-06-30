@@ -1,40 +1,137 @@
 <template>
-  <div class="hello">
-    <h1>{{ msg }}</h1>
-    <p>
-      For a guide and recipes on how to configure / customize this project,<br>
-      check out the
-      <a href="https://cli.vuejs.org" target="_blank" rel="noopener">vue-cli documentation</a>.
-    </p>
-    <h3>Installed CLI Plugins</h3>
-    <ul>
-      <li><a href="https://github.com/vuejs/vue-cli/tree/dev/packages/%40vue/cli-plugin-babel" target="_blank" rel="noopener">babel</a></li>
-      <li><a href="https://github.com/vuejs/vue-cli/tree/dev/packages/%40vue/cli-plugin-eslint" target="_blank" rel="noopener">eslint</a></li>
-    </ul>
-    <h3>Essential Links</h3>
-    <ul>
-      <li><a href="https://vuejs.org" target="_blank" rel="noopener">Core Docs</a></li>
-      <li><a href="https://forum.vuejs.org" target="_blank" rel="noopener">Forum</a></li>
-      <li><a href="https://chat.vuejs.org" target="_blank" rel="noopener">Community Chat</a></li>
-      <li><a href="https://twitter.com/vuejs" target="_blank" rel="noopener">Twitter</a></li>
-      <li><a href="https://news.vuejs.org" target="_blank" rel="noopener">News</a></li>
-    </ul>
-    <h3>Ecosystem</h3>
-    <ul>
-      <li><a href="https://router.vuejs.org" target="_blank" rel="noopener">vue-router</a></li>
-      <li><a href="https://vuex.vuejs.org" target="_blank" rel="noopener">vuex</a></li>
-      <li><a href="https://github.com/vuejs/vue-devtools#vue-devtools" target="_blank" rel="noopener">vue-devtools</a></li>
-      <li><a href="https://vue-loader.vuejs.org" target="_blank" rel="noopener">vue-loader</a></li>
-      <li><a href="https://github.com/vuejs/awesome-vue" target="_blank" rel="noopener">awesome-vue</a></li>
-    </ul>
+  <div class="MainClass">
+    <form v-on:submit.prevent="getSummonerStats">
+      <input type="text" v-model="summonerName">
+      <input type="text" v-model="partnerSummonerName">
+      <input type="text" v-model="numMatches">
+      <button type="submit">Search</button>
+    </form>
+    <div v-if="loaded">
+      <h5>Total Games: {{summonerMatches.length}}</h5>
+      <h5>Duo Games: {{duoMatches.length}}</h5>
+      <h5>Solo Games: {{soloMatches.length}}</h5>
+      <h5>{{summonerName}} Solo: {{findAverage(soloSummonerStats.kills) + "/" + findAverage(soloSummonerStats.deaths) + "/" + findAverage(soloSummonerStats.assists)}}</h5>
+      <h5>{{summonerName}} with {{partnerSummonerName}}: {{findAverage(duoSummonerStats.kills) + "/" + findAverage(duoSummonerStats.deaths) + "/" + findAverage(duoSummonerStats.assists)}}</h5>
+      <h5>{{partnerSummonerName}} with {{summonerName}}: {{findAverage(duoPartnerStats.kills) + "/" + findAverage(duoPartnerStats.deaths) + "/" + findAverage(duoPartnerStats.assists)}}</h5>
+    </div>
   </div>
 </template>
 
 <script>
+import api from '@/api'
 export default {
   name: 'HelloWorld',
-  props: {
-    msg: String
+  data: function () {
+    return {
+      summonerName: 'JayLenoIsDaHomie',
+      partnerSummonerName: 'Kevin246',
+      numMatches: 1,
+      summonerMatches: [],
+      soloMatches: [],
+      duoMatches: [],
+      loaded: false,
+      soloSummonerStats: {
+        kills: [],
+        deaths: [],
+        assists: [],
+        won: []
+      },
+      duoSummonerStats: {
+        kills: [],
+        deaths: [],
+        assists: [],
+        won: []
+      },
+      duoPartnerStats: {
+        kills: [],
+        deaths: [],
+        assists: [],
+        won: []
+      }
+    }
+  },
+  methods: {
+    getSummonerStats: function () {
+      api.getSummonerInfo(this.summonerName).then(response => this.getSummonerMatches(response.data.accountId))
+    },
+
+    getSummonerMatches: function (accountId) {
+      api.getSummonerMatches(accountId).then(response => this.getMatches(response.data.matches))
+    },
+
+    getMatches: function (matches) {
+      for (let index = 0; index < this.numMatches; index++) {
+        api.getMatch(matches[index].gameId).then(match => this.addMatch(match, index))
+      }
+    },
+
+    findSoloMatches: function () {
+      this.soloMatches = this.summonerMatches.filter(match => !this.duoMatches.some(duoMatch => duoMatch.gameId === match.gameId))
+    },
+
+    findDuoMatches: function () {
+      this.duoMatches = this.summonerMatches.filter(match => match.participantIdentities.find(participant => participant.player.summonerName === this.partnerSummonerName))
+    },
+
+    addMatch: function (match, index) {
+      this.summonerMatches.push(match.data)
+
+      if (index >= this.numMatches - 1) {
+        this.findDuoMatches()
+        this.findSoloMatches()
+        this.setStatsForAllMatches()
+        this.loaded = true
+      }
+    },
+
+    findParticipantId: function (name, match) {
+      let participantIdentity = match.participantIdentities.find(participant => participant.player.summonerName === name)
+      if (typeof participantIdentity != "undefined") {
+        return participantIdentity.participantId
+      }
+    },
+
+    findPlayer: function (name, match) {
+      let participantId = this.findParticipantId(name, match)
+      return match.participants.find(participant => participant.participantId === participantId)
+    },
+
+    setStatsForAllMatches: function () {
+      this.summonerMatches.forEach(this.setStats)
+    },
+
+    setStats: function (match) {
+      let summoner = this.findPlayer(this.summonerName, match).stats
+      let partner = this.findPlayer(this.partnerSummonerName, match)
+      let summonerStats = summoner.stats
+      let partnerStats;
+
+      if (partner) { partnerStats = partner.stats }
+
+      if (partnerStats) {x
+        this.duoSummonerStats.kills.push(summonerStats.kills)
+        this.duoSummonerStats.deaths.push(summonerStats.deaths)
+        this.duoSummonerStats.assists.push(summonerStats.assists)
+
+        this.duoPartnerStats.kills.push(partnerStats.kills)
+        this.duoPartnerStats.deaths.push(partnerStats.deaths)
+        this.duoPartnerStats.assists.push(partnerStats.assists)
+      }
+      else {
+        this.soloSummonerStats.kills.push(summonerStats.kills)
+        this.soloSummonerStats.deaths.push(summonerStats.deaths)
+        this.soloSummonerStats.assists.push(summonerStats.assists)
+      }
+    },
+
+    findAverage: function (stats) {
+      let average = stats.reduce((a, b) => a + b, 0) / stats.length
+      if (isNaN(average)) {
+        return "?"
+      } else {
+        return Math.round(average * 10) / 10
+      }
+    }
   }
 }
 </script>
