@@ -108,7 +108,7 @@ export default {
 
       if (partner) { partnerStats = partner.stats }
 
-      if (partnerStats) {x
+      if (partnerStats) {
         this.duoSummonerStats.kills.push(summonerStats.kills)
         this.duoSummonerStats.deaths.push(summonerStats.deaths)
         this.duoSummonerStats.assists.push(summonerStats.assists)
