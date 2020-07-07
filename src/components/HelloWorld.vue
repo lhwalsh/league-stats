@@ -101,7 +101,7 @@ export default {
     },
 
     setStats: function (match) {
-      let summoner = this.findPlayer(this.summonerName, match).stats
+      let summoner = this.findPlayer(this.summonerName, match)
       let partner = this.findPlayer(this.partnerSummonerName, match)
       let summonerStats = summoner.stats
       let partnerStats;
